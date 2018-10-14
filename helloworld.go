@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"time"
 
+	"contrib.go.opencensus.io/exporter/stackdriver"
+	"go.opencensus.io/trace"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/memcache"
@@ -20,7 +22,20 @@ type Hoge struct {
 }
 
 func main() {
+	log.Println("Start Main")
+
+	exporter, err := stackdriver.NewExporter(stackdriver.Options{
+		ProjectID: "sinmetal-go",
+	})
+	if err != nil {
+		panic(err)
+	}
+	trace.RegisterExporter(exporter)
+
 	ctx := context.Background()
+	ctx, span := trace.StartSpan(ctx, "/main")
+	defer span.End()
+
 	sc, err := NewSpannerClient(ctx, "projects/gcpug-public-spanner/instances/merpay-sponsored-instance/databases/sinmetal")
 	if err != nil {
 		panic(err)

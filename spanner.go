@@ -5,11 +5,16 @@ import (
 	"net/http"
 
 	"cloud.google.com/go/spanner"
+	"go.opencensus.io/trace"
 	"google.golang.org/api/iterator"
 )
 
 func SpannerSimpleQueryHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	ctx, span := trace.StartSpan(ctx, "/spanner")
+	defer span.End()
+
 	if err := spannerService.SimpleQuery(ctx); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
