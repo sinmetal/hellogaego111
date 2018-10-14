@@ -1,30 +1,79 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
+	"time"
+
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/datastore"
+	"google.golang.org/appengine/memcache"
 )
 
-func main() {
-	http.HandleFunc("/", indexHandler)
+var spannerService *SpannerService
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-		log.Printf("Defaulting to port %s", port)
-	}
-
-	log.Printf("Listening on port %s", port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
+type Hoge struct {
+	CreatedAt time.Time `json:"createdAt"`
 }
 
-// indexHandler responds to requests with our greeting.
-func indexHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
+func main() {
+	ctx := context.Background()
+	sc, err := NewSpannerClient(ctx, "projects/gcpug-public-spanner/instances/merpay-sponsored-instance/databases/sinmetal")
+	if err != nil {
+		panic(err)
+	}
+
+	spannerService = NewSpannerService(sc)
+
+	http.HandleFunc("/datastore", datastoreHandler)
+	http.HandleFunc("/memcache", memcacheHandler)
+	http.HandleFunc("/spanner", SpannerSimpleQueryHandler)
+
+	appengine.Main()
+}
+
+const Kind = "HelloGAEGo111"
+
+func datastoreHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := appengine.NewContext(r)
+
+	o := Hoge{
+		CreatedAt: time.Now(),
+	}
+	k, err := datastore.Put(ctx, datastore.NewKey(ctx, Kind, "", time.Now().Unix(), nil), &o)
+	if err != nil {
+		log.Fatalf("failed Datastore.put(), err=%+v", err)
+	}
+	log.Printf("%Key=+v\n", k)
+
+	var list []Hoge
+	q := datastore.NewQuery(Kind)
+	q.GetAll(ctx, &list)
+	log.Println(list)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(list); err != nil {
+		log.Fatalln(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func memcacheHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := appengine.NewContext(r)
+
+	if err := memcache.Add(ctx, &memcache.Item{
+		Key:   "Hoge",
+		Value: []byte("VALUE"),
+	}); err != nil {
+		msg := fmt.Sprintf("failed Memcache.Add(), err=%+v", err)
+		log.Fatal(msg)
+		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
-	fmt.Fprint(w, "Hello, World!")
+
+	w.Write([]byte("DONE"))
 }

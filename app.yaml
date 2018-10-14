@@ -1,1 +1,5 @@
-runtime: go111cat 
+runtime: go111
+
+handlers:
+- url: /.*
+  script: _go_app
